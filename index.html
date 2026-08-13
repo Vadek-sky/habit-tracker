@@ -164,6 +164,85 @@
     cursor: pointer;
   }
   .loading{ text-align:center; color: var(--text-dim); padding: 40px; font-size:13px; }
+
+  .header-row{
+    display:flex;
+    align-items:flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .edit-toggle{
+    flex-shrink:0;
+    background: var(--bg-raised);
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+    width: 34px; height: 34px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 15px;
+    margin-top: 2px;
+  }
+  .edit-toggle:hover{ border-color: var(--gold); color: var(--gold); }
+  .edit-toggle.active{ border-color: var(--gold); color: var(--gold); background: #241f10; }
+
+  .edit-habit{
+    background: var(--bg-raised);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 8px;
+  }
+  .edit-habit input{
+    width: 100%;
+    background: #101315;
+    border: 1px solid var(--line);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 13.5px;
+    margin-bottom: 6px;
+    font-family: inherit;
+  }
+  .edit-habit input.why-input{ font-size: 12px; color: var(--text-dim); }
+  .edit-habit input:focus{ outline: none; border-color: var(--gold); }
+  .edit-row-actions{
+    display:flex;
+    justify-content:flex-end;
+  }
+  .del-btn{
+    background: none;
+    border: 1px solid var(--red);
+    color: var(--red);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .del-btn:hover{ background: #2a1517; }
+  .add-habit-btn{
+    width: 100%;
+    background: var(--bg-raised);
+    border: 1px dashed var(--line);
+    color: var(--text-dim);
+    border-radius: 10px;
+    padding: 12px;
+    font-size: 13.5px;
+    cursor: pointer;
+    margin-bottom: 8px;
+  }
+  .add-habit-btn:hover{ border-color: var(--gold); color: var(--gold); }
+  .edit-done-btn{
+    width: 100%;
+    background: var(--teal);
+    border: none;
+    color: #0e1512;
+    font-weight: 600;
+    border-radius: 10px;
+    padding: 12px;
+    font-size: 13.5px;
+    cursor: pointer;
+    margin-top: 6px;
+  }
 </style>
 </head>
 <body>
@@ -172,13 +251,33 @@
 </div>
 
 <script>
-const HABITS = [
+const DEFAULT_HABITS = [
   { id: 'no_phone_morning', name: 'Первые 30 минут без телефона', why: 'задаёт тон дню' },
   { id: 'real_rest_after_session', name: 'После сессии — телефон в другую комнату на 20-30 мин', why: 'настоящий отдых, не смена стимуляции' },
   { id: 'no_social_before_noon', name: 'Без соцсетей/YouTube до обеда', why: 'снижает импульсивный скролл' },
   { id: 'no_reels_after_series', name: 'После сериала — сразу отбой, без рилсов/соцсетей', why: 'рилсы сдвигают засыпание сильнее всего' },
   { id: 'gto_drill', name: 'Хотя бы 1 дрилл в GTO Wizard', why: 'правило 2 минут' },
 ];
+
+let HABITS = [];
+let editMode = false;
+
+function loadHabits(){
+  try{
+    const raw = localStorage.getItem('habit_definitions');
+    HABITS = raw ? JSON.parse(raw) : DEFAULT_HABITS.slice();
+  }catch(e){
+    HABITS = DEFAULT_HABITS.slice();
+  }
+}
+
+function saveHabits(){
+  try{
+    localStorage.setItem('habit_definitions', JSON.stringify(HABITS));
+  }catch(e){
+    console.error('failed to save habit list', e);
+  }
+}
 
 let state = { records: {}, selectedDate: todayStr() };
 
@@ -197,6 +296,7 @@ function fmtLabel(dateStr){
 }
 
 function loadAll(){
+  loadHabits();
   try{
     const raw = localStorage.getItem('habit_records');
     state.records = raw ? JSON.parse(raw) : {};
@@ -287,11 +387,19 @@ function render(){
   const best = bestStreak();
 
   let html = '';
-  html += '<header>';
+  html += '<div class="header-row"><header>';
   html += '<div class="eyebrow">Трекер дисциплины</div>';
   html += '<h1>Меньше телефона, больше сделано</h1>';
-  html += '<div class="sub">5 привычек в день — отмечай честно</div>';
+  html += `<div class="sub">${HABITS.length} привычек в день — отмечай честно</div>`;
   html += '</header>';
+  html += `<button class="edit-toggle ${editMode ? 'active' : ''}" onclick="toggleEditMode()" title="Редактировать список">${editMode ? '✕' : '✎'}</button>`;
+  html += '</div>';
+
+  if(editMode){
+    html += renderEditList();
+    app.innerHTML = html;
+    return;
+  }
 
   html += '<div class="streak-row">';
   html += `<div class="streak-card"><div class="streak-num">${streak}</div><div class="streak-label">Текущая серия</div></div>`;
@@ -303,6 +411,10 @@ function render(){
   html += `<div class="date-label ${isToday ? 'today' : ''}">${isToday ? 'Сегодня · ' : ''}${fmtLabel(sel)}</div>`;
   html += `<button onclick="navDate(1)" ${sel >= todayStr() ? 'disabled style="opacity:0.3;cursor:default;"' : ''}>›</button>`;
   html += '</div>';
+
+  if(HABITS.length === 0){
+    html += '<div class="loading">Список пуст — нажми ✎ вверху, чтобы добавить привычки</div>';
+  }
 
   HABITS.forEach(h => {
     const done = !!rec[h.id];
@@ -331,6 +443,46 @@ function render(){
   renderStatus();
 }
 
+function renderEditList(){
+  let html = '<div class="sub" style="margin-bottom:14px;">Правь названия, удаляй или добавляй пункты. Изменения сохраняются сразу.</div>';
+  HABITS.forEach((h, idx) => {
+    html += `<div class="edit-habit">`;
+    html += `<input type="text" value="${escapeAttr(h.name)}" placeholder="Название привычки" oninput="updateHabitField(${idx},'name',this.value)">`;
+    html += `<input type="text" class="why-input" value="${escapeAttr(h.why)}" placeholder="Почему это важно (необязательно)" oninput="updateHabitField(${idx},'why',this.value)">`;
+    html += `<div class="edit-row-actions"><button class="del-btn" onclick="deleteHabit(${idx})">Удалить</button></div>`;
+    html += `</div>`;
+  });
+  html += `<button class="add-habit-btn" onclick="addHabit()">+ Добавить привычку</button>`;
+  html += `<button class="edit-done-btn" onclick="toggleEditMode()">Готово</button>`;
+  return html;
+}
+
+function escapeAttr(str){
+  return String(str).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+}
+
+function toggleEditMode(){
+  editMode = !editMode;
+  render();
+}
+
+function addHabit(){
+  HABITS.push({ id: 'habit_' + Date.now(), name: 'Новая привычка', why: '' });
+  saveHabits();
+  render();
+}
+
+function deleteHabit(idx){
+  HABITS.splice(idx, 1);
+  saveHabits();
+  render();
+}
+
+function updateHabitField(idx, field, value){
+  HABITS[idx][field] = value;
+  saveHabits();
+}
+
 function navDate(delta){
   const next = addDays(state.selectedDate, delta);
   if(next > todayStr()) return;
@@ -351,6 +503,10 @@ window.toggleHabit = toggleHabit;
 window.navDate = navDate;
 window.selectDate = selectDate;
 window.resetToday = resetToday;
+window.toggleEditMode = toggleEditMode;
+window.addHabit = addHabit;
+window.deleteHabit = deleteHabit;
+window.updateHabitField = updateHabitField;
 
 loadAll();
 </script>
