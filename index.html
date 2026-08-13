@@ -196,40 +196,26 @@ function fmtLabel(dateStr){
   return d.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
-async function loadAll(){
+function loadAll(){
   try{
-    const res = await window.storage.get('habit_records', false);
-    state.records = res ? JSON.parse(res.value) : {};
+    const raw = localStorage.getItem('habit_records');
+    state.records = raw ? JSON.parse(raw) : {};
   }catch(e){
-    // key not found yet or transient error — start fresh, don't block rendering
     state.records = {};
   }
   render();
 }
 
-let saveStatus = 'idle'; // idle | saving | error
+let saveStatus = 'idle'; // idle | error
 
-async function saveRecords(retries){
-  if(retries === undefined) retries = 3;
-  saveStatus = 'saving';
-  renderStatus();
-  for(let attempt = 0; attempt < retries; attempt++){
-    try{
-      const result = await window.storage.set('habit_records', JSON.stringify(state.records), false);
-      if(result){
-        saveStatus = 'idle';
-        renderStatus();
-        return;
-      }
-      throw new Error('empty result');
-    }catch(e){
-      console.error('save attempt failed', attempt, e);
-      if(attempt < retries - 1){
-        await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
-      }
-    }
+function saveRecords(){
+  try{
+    localStorage.setItem('habit_records', JSON.stringify(state.records));
+    saveStatus = 'idle';
+  }catch(e){
+    console.error('save failed', e);
+    saveStatus = 'error';
   }
-  saveStatus = 'error';
   renderStatus();
 }
 
