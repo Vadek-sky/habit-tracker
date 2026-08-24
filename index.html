@@ -243,6 +243,63 @@
     cursor: pointer;
     margin-top: 6px;
   }
+
+  .stats{
+    margin-top: 16px;
+    background: var(--bg-raised);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .stats-title{
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .stats-days{
+    font-family: ui-monospace, monospace;
+    font-size: 20px;
+    color: var(--gold);
+    margin-bottom: 14px;
+  }
+  .stat-row{ margin-bottom: 12px; }
+  .stat-row:last-child{ margin-bottom: 0; }
+  .stat-row-top{
+    display:flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 5px;
+    gap: 8px;
+  }
+  .stat-name{ font-size: 12.5px; flex: 1; }
+  .stat-frac{
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+  .stat-bar-bg{
+    height: 6px;
+    background: #23272b;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .stat-bar-fill{
+    height: 100%;
+    background: var(--teal);
+    border-radius: 3px;
+  }
+  .stat-row.weakest .stat-bar-fill{ background: var(--red); }
+  .stat-row.weakest .stat-name{ color: #e8a8ae; }
+  .weakest-tag{
+    font-size: 10px;
+    color: var(--red);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 10px;
+  }
 </style>
 </head>
 <body>
@@ -290,6 +347,14 @@ function addDays(dateStr, n){
   d.setDate(d.getDate() + n);
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
+function daysWord(n){
+  const mod10 = n % 10, mod100 = n % 100;
+  if(mod100 >= 11 && mod100 <= 14) return 'дней';
+  if(mod10 === 1) return 'день';
+  if(mod10 >= 2 && mod10 <= 4) return 'дня';
+  return 'дней';
+}
+
 function fmtLabel(dateStr){
   const d = new Date(dateStr + 'T00:00:00');
   return d.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -378,6 +443,42 @@ function bestStreak(){
   return best;
 }
 
+function getStartDate(){
+  try{
+    let start = localStorage.getItem('habit_start_date');
+    if(!start){
+      start = todayStr();
+      localStorage.setItem('habit_start_date', start);
+    }
+    return start;
+  }catch(e){
+    return todayStr();
+  }
+}
+
+function getDaysSinceStart(){
+  const start = getStartDate();
+  const today = todayStr();
+  const startD = new Date(start + 'T00:00:00');
+  const todayD = new Date(today + 'T00:00:00');
+  const diff = Math.round((todayD - startD) / 86400000);
+  return diff + 1;
+}
+
+function habitStats(habitId){
+  const start = getStartDate();
+  const totalDays = getDaysSinceStart();
+  let done = 0;
+  let cursor = start;
+  for(let i = 0; i < totalDays; i++){
+    const rec = state.records[cursor] || {};
+    if(rec[habitId]) done++;
+    cursor = addDays(cursor, 1);
+  }
+  const pct = totalDays > 0 ? Math.round((done / totalDays) * 100) : 0;
+  return { done, totalDays, pct };
+}
+
 function render(){
   const app = document.getElementById('app');
   const sel = state.selectedDate;
@@ -435,6 +536,29 @@ function render(){
     html += `<div class="day-cell ${cls} ${selCls}" onclick="selectDate('${d}')">${dayNum}</div>`;
   }
   html += '</div></div>';
+
+  if(HABITS.length > 0){
+    const daysSince = getDaysSinceStart();
+    const statsList = HABITS.map(h => ({ h, s: habitStats(h.id) }));
+    const minPct = Math.min(...statsList.map(x => x.s.pct));
+    const weakestId = statsList.find(x => x.s.pct === minPct && daysSince > 1)?.h.id;
+
+    html += '<div class="stats">';
+    html += '<div class="stats-title">Статистика</div>';
+    html += `<div class="stats-days">${daysSince} ${daysWord(daysSince)} с начала</div>`;
+    statsList.forEach(({h, s}) => {
+      const isWeakest = h.id === weakestId;
+      html += `<div class="stat-row ${isWeakest ? 'weakest' : ''}">`;
+      html += `<div class="stat-row-top"><div class="stat-name">${h.name}</div><div class="stat-frac">${s.done}/${s.totalDays} · ${s.pct}%</div></div>`;
+      html += `<div class="stat-bar-bg"><div class="stat-bar-fill" style="width:${s.pct}%"></div></div>`;
+      html += '</div>';
+    });
+    if(weakestId && daysSince > 1){
+      const weakestHabit = HABITS.find(h => h.id === weakestId);
+      html += `<div class="weakest-tag">Слабое место: ${weakestHabit.name}</div>`;
+    }
+    html += '</div>';
+  }
 
   html += '<div class="reset"><button onclick="resetToday()">Сбросить этот день</button></div>';
   html += '<div id="save-status" style="text-align:center; font-size:11px; margin-top:10px; min-height:14px;"></div>';
